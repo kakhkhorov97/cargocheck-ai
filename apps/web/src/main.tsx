@@ -310,20 +310,26 @@ function App() {
               Original documents stay unchanged. Every correction has a history.
             </p>
             <div className="mode">
-              <span className="dot" />
-              {health?.extraction === "gemini" ? "Gemini cloud" : "Local OCR"}
+              {health && <span className="dot" />}
+              {!health
+                ? "Extraction mode unavailable"
+                : health.extraction === "gemini"
+                  ? "Gemini cloud"
+                  : "Local OCR"}
             </div>
             <small>
-              {health?.extraction === "gemini"
-                ? "Documents are sent to Google Gemini to extract fields."
-                : "English OCR and labelled templates extract fields without AI. Documents stay on this server."}
+              {!health
+                ? "Reload the page to check where documents are processed."
+                : health.extraction === "gemini"
+                  ? "Documents are sent to Google Gemini to extract fields."
+                  : "English OCR and labelled templates extract fields without AI. Documents stay on this server."}
             </small>
             <details>
               <summary>Development services</summary>
               <small>
-                Storage: {health?.storage}
+                Storage: {health?.storage ?? "Unavailable"}
                 <br />
-                Jobs: {health?.queue}
+                Jobs: {health?.queue ?? "Unavailable"}
               </small>
             </details>
           </div>
