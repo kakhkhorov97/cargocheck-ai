@@ -4,6 +4,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: Number(process.env.WEB_PORT ?? 4173),
+    strictPort: true,
     allowedHosts: ["terminal.local", "localhost"],
     proxy: { "/api": `http://127.0.0.1:${process.env.API_PORT ?? 3001}` },
   },
