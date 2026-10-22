@@ -304,13 +304,13 @@ function App() {
             <div className="mode">
               <span className="dot" />
               {health?.extraction === "gemini"
-                ? "Gemini extraction"
-                : "Local extraction"}
+                ? "Gemini cloud"
+                : "Local OCR"}
             </div>
             <small>
               {health?.extraction === "gemini"
-                ? "Documents are sent to Google for extraction."
-                : "Documents stay on this server. English OCR + labelled-template parsing."}
+                ? "Documents are sent to Google Gemini to extract fields."
+                : "English OCR and labelled templates extract fields without AI. Documents stay on this server."}
             </small>
             <details>
               <summary>Development services</summary>
