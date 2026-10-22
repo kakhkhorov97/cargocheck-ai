@@ -2,6 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { api } from "../apps/web/src/api";
 
+test("connection failures explain how to recover", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new TypeError("Failed to fetch");
+  });
+  await assert.rejects(api("/shipments"), {
+    message: "Could not reach the server. Check your connection and try again.",
+  });
+});
+
 test("API failures always include a readable message", async (t) => {
   const fallback = "Request failed (400). Please try again.";
   const cases = [
