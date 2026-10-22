@@ -55,9 +55,10 @@ const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 const now = () => new Date().toISOString();
 const credentials = z.object({
   email: z
-    .email()
-    .max(254)
-    .transform((s) => s.toLowerCase().trim()),
+    .string()
+    .trim()
+    .pipe(z.email().max(254))
+    .transform((s) => s.toLowerCase()),
   password: z.string().min(10).max(128),
   name: z.string().trim().min(1).max(80).optional(),
 });
