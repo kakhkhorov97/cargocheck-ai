@@ -221,6 +221,14 @@ function App() {
         x.reviewStatus !== "reviewed" &&
         Object.values(x.documents).some((d) => d.status === "ready"),
     ).length;
+  const visibleShipments = shipments.filter(
+    (x) =>
+      x.reference.toLowerCase().includes(search.trim().toLowerCase()) &&
+      (filter === "All reviews" ||
+        (filter === "Reviewed"
+          ? x.reviewStatus === "reviewed"
+          : x.reviewStatus !== "reviewed")),
+  );
   return (
     <>
       <header className="topbar">
@@ -303,9 +311,7 @@ function App() {
             </p>
             <div className="mode">
               <span className="dot" />
-              {health?.extraction === "gemini"
-                ? "Gemini cloud"
-                : "Local OCR"}
+              {health?.extraction === "gemini" ? "Gemini cloud" : "Local OCR"}
             </div>
             <small>
               {health?.extraction === "gemini"
@@ -445,93 +451,93 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {shipments
-                      .filter(
-                        (x) =>
-                          x.reference
-                            .toLowerCase()
-                            .includes(search.toLowerCase()) &&
-                          (filter === "All reviews" ||
-                            (filter === "Reviewed"
-                              ? x.reviewStatus === "reviewed"
-                              : x.reviewStatus !== "reviewed")),
-                      )
-                      .map((x) => (
-                        <tr key={x.id} onClick={() => open(x)}>
-                          <td>
-                            <button
-                              className="ref-link"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                open(x);
-                              }}
-                            >
-                              {x.reference}
-                            </button>
-                            {x.synthetic && (
-                              <small className="sample-label">
-                                Synthetic sample
-                              </small>
-                            )}
-                          </td>
-                          <td>
-                            {x.documents.invoice?.extraction?.seller.value ??
-                              "Not extracted yet"}
-                            <small>
-                              to{" "}
-                              {x.documents.invoice?.extraction?.consignee
-                                .value ?? "Not extracted yet"}
+                    {visibleShipments.map((x) => (
+                      <tr key={x.id} onClick={() => open(x)}>
+                        <td>
+                          <button
+                            className="ref-link"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              open(x);
+                            }}
+                          >
+                            {x.reference}
+                          </button>
+                          {x.synthetic && (
+                            <small className="sample-label">
+                              Synthetic sample
                             </small>
-                          </td>
-                          <td>
-                            {(["invoice", "packing"] as const).map((k) => (
-                              <div className="doc-status" key={k}>
-                                <FileText size={13} />
-                                {k === "invoice" ? "Invoice" : "Packing list"}
-                                {x.documents[k] ? (
-                                  <Check size={13} />
-                                ) : (
-                                  <span>Missing</span>
-                                )}
-                              </div>
-                            ))}
-                          </td>
-                          <td>
-                            <Badge status={processingStatus(x)} />
-                          </td>
-                          <td>
-                            <Badge
-                              status={
-                                x.reviewStatus === "reviewed"
-                                  ? "Reviewed"
-                                  : "In progress"
-                              }
-                            />
-                            {x.checks.some(
-                              (c) => c.status === "discrepancy",
-                            ) && (
-                              <small>
-                                {
-                                  x.checks.filter(
-                                    (c) => c.status === "discrepancy",
-                                  ).length
-                                }{" "}
-                                discrepancies
-                              </small>
-                            )}
-                          </td>
-                          <td className="muted">{date(x.updatedAt)}</td>
-                          <td>
-                            <ChevronRight size={17} />
-                          </td>
-                        </tr>
-                      ))}
+                          )}
+                        </td>
+                        <td>
+                          {x.documents.invoice?.extraction?.seller.value ??
+                            "Not extracted yet"}
+                          <small>
+                            to{" "}
+                            {x.documents.invoice?.extraction?.consignee.value ??
+                              "Not extracted yet"}
+                          </small>
+                        </td>
+                        <td>
+                          {(["invoice", "packing"] as const).map((k) => (
+                            <div className="doc-status" key={k}>
+                              <FileText size={13} />
+                              {k === "invoice" ? "Invoice" : "Packing list"}
+                              {x.documents[k] ? (
+                                <Check size={13} />
+                              ) : (
+                                <span>Missing</span>
+                              )}
+                            </div>
+                          ))}
+                        </td>
+                        <td>
+                          <Badge status={processingStatus(x)} />
+                        </td>
+                        <td>
+                          <Badge
+                            status={
+                              x.reviewStatus === "reviewed"
+                                ? "Reviewed"
+                                : "In progress"
+                            }
+                          />
+                          {x.checks.some((c) => c.status === "discrepancy") && (
+                            <small>
+                              {
+                                x.checks.filter(
+                                  (c) => c.status === "discrepancy",
+                                ).length
+                              }{" "}
+                              discrepancies
+                            </small>
+                          )}
+                        </td>
+                        <td className="muted">{date(x.updatedAt)}</td>
+                        <td>
+                          <ChevronRight size={17} />
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
                 {!shipments.length && (
                   <p className="empty">
                     No reviews yet. Create a review or try the sample shipment.
                   </p>
+                )}
+                {shipments.length > 0 && !visibleShipments.length && (
+                  <div className="empty" role="status">
+                    <p>No reviews match your search and filters.</p>
+                    <Button
+                      onClick={() => {
+                        setSearch("");
+                        setFilter("All reviews");
+                      }}
+                    >
+                      Show all reviews
+                    </Button>
+                  </div>
                 )}
               </div>
               <div className="legend">
