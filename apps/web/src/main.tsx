@@ -229,6 +229,9 @@ function App() {
           ? x.reviewStatus === "reviewed"
           : x.reviewStatus !== "reviewed")),
   );
+  const canRunChecks = (["invoice", "packing"] as const).every(
+    (kind) => selected?.documents[kind]?.status === "ready",
+  );
   return (
     <>
       <header className="topbar">
@@ -633,7 +636,7 @@ function App() {
                       </div>
                       <div className="actions">
                         <Button
-                          disabled={busy}
+                          disabled={busy || !canRunChecks}
                           onClick={() => void mutate("/validate")}
                         >
                           <RefreshCw size={16} />
@@ -722,7 +725,7 @@ function App() {
                         </span>
                       </div>
                       <Button
-                        disabled={busy}
+                        disabled={busy || !canRunChecks}
                         onClick={() => void mutate("/validate")}
                       >
                         <RefreshCw size={15} />
