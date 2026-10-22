@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Pool } from "pg";
 import type { State } from "@cargo/shared";
+import { validateProductionDatabase } from "./production-config";
 
 const empty = (): State => ({ users: [], sessions: [], shipments: [] });
 export class Store {
@@ -9,6 +10,7 @@ export class Store {
   private pool?: Pool;
   readonly root = path.resolve(process.env.DATA_DIR ?? "../../data");
   async init() {
+    validateProductionDatabase();
     await mkdir(path.join(this.root, "files"), {
       recursive: true,
       mode: 0o700,
