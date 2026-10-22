@@ -14,11 +14,18 @@ export async function api<T>(
     body: body === undefined ? undefined : form ? body : JSON.stringify(body),
   });
   if (!r.ok) {
-    let message = "Request failed";
+    let message = `Request failed (${r.status}). Please try again.`;
     try {
       const e = await r.json();
-      message =
-        typeof e.message === "string" ? e.message : JSON.stringify(e.message);
+      if (typeof e?.message === "string" && e.message.trim()) {
+        message = e.message;
+      } else if (Array.isArray(e?.message)) {
+        const details = e.message.filter(
+          (item: unknown): item is string =>
+            typeof item === "string" && item.trim().length > 0,
+        );
+        if (details.length) message = details.join(" ");
+      }
     } catch {}
     throw new Error(message);
   }
