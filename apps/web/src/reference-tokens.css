@@ -1,0 +1,91 @@
+/* CargoCheck AI — UI concept tokens
+   Navy / teal / white / amber. Neutrals tinted toward the navy hue.
+   Status colours always ship with an icon and a text label. */
+:root{
+  --navy-900:#13284A; --navy-800:#1C3560; --navy-700:#2A4A7C; --navy-100:#E4EAF3;
+  --teal-700:#0B6E6D; --teal-600:#0F7F7D; --teal-100:#DDF0EF; --teal-50:#EEF7F6;
+  --amber-800:#7F4400; --amber-500:#E39A22; --amber-100:#FFF0D6;
+  --red-700:#A8231A; --red-500:#D64235; --red-100:#FCE9E6;
+  --green-700:#1B6B3D; --green-100:#E3F2E8;
+  --ink:#16243A; --ink-2:#3B4A61; --muted:#56647A; --faint:#8592A6;
+  --line:#D9E0EA; --line-2:#E8EDF3; --bg:#F3F6FA; --surface:#FFFFFF; --sunk:#E9EEF4;
+  --r-s:4px; --r-m:6px; --r-l:10px;
+  --font:"Noto Sans CJK KR","Noto Sans KR",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+svg.i.s{width:14px;height:14px}
+button{font:inherit;cursor:pointer}
+
+/* top bar */
+.top{height:56px;background:var(--navy-900);color:#fff;display:flex;align-items:center;gap:20px;padding:0 20px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;letter-spacing:.1px}
+.brand .mark{width:26px;height:26px;border-radius:6px;background:var(--teal-600);display:grid;place-items:center}
+.brand .mark svg{width:16px;height:16px;stroke:#fff}
+.crumbs{color:#B9C6DA;font-size:13px;display:flex;gap:8px;align-items:center}
+.crumbs b{color:#fff;font-weight:500}
+.top .spacer{flex:1}
+.concept{font-size:12px;color:#FFE2B0;border:1px solid rgba(255,226,176,.45);border-radius:999px;padding:3px 10px;white-space:nowrap}
+.lang{display:flex;border:1px solid #3E5A86;border-radius:var(--r-m);overflow:hidden;font-size:12px}
+.lang span{padding:4px 9px;color:#B9C6DA}
+.lang span.on{background:#2E4B78;color:#fff;font-weight:500}
+.avatar{width:30px;height:30px;border-radius:50%;background:#2E4B78;display:grid;place-items:center;font-size:12px;font-weight:500}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:var(--r-m);border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:500;font-size:13.5px;white-space:nowrap}
+.btn.primary{background:var(--teal-700);border-color:var(--teal-700);color:#fff}
+.btn.navy{background:var(--navy-900);border-color:var(--navy-900);color:#fff}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--teal-700)}
+.btn:focus-visible,.focus{outline:2px solid var(--teal-600);outline-offset:2px}
+
+/* status labels: icon + text + colour */
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;padding:3px 9px 3px 7px;border-radius:999px;white-space:nowrap;line-height:1.3}
+.st.pass{background:var(--green-100);color:var(--green-700)}
+.st.review{background:var(--amber-100);color:var(--amber-800)}
+.st.disc{background:var(--red-100);color:var(--red-700)}
+.st.info{background:var(--navy-100);color:var(--navy-800)}
+.st.neutral{background:var(--sunk);color:var(--ink-2)}
+.st.teal{background:var(--teal-100);color:var(--teal-700)}
+
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+.ref{color:var(--teal-700);font-weight:500;text-decoration:underline;text-decoration-color:rgba(11,110,109,.35);text-underline-offset:2px}
+.kbd{font-size:12px;color:var(--muted)}
+
+/* paper documents (synthetic) */
+.paper{width:600px;min-height:780px;background:#fff;color:#1d1d1d;padding:40px 42px 34px;font-family:"Liberation Sans",Arial,sans-serif;font-size:12px;line-height:1.45;box-shadow:0 1px 2px rgba(19,40,74,.18),0 6px 18px rgba(19,40,74,.08);position:relative}
+.paper h1{font-size:18px;letter-spacing:1.5px;font-weight:700;margin-bottom:4px}
+.paper .sub{font-size:10.5px;color:#666;margin-bottom:22px}
+.paper .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+.paper .lbl{font-size:9.5px;color:#666;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px}
+.paper .blk{font-size:11.5px}
+.paper .meta{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid #bbb;margin-bottom:18px}
+.paper .meta div{padding:6px 8px;border-right:1px solid #bbb}
+.paper .meta div:last-child{border-right:0}
+.paper table{width:100%;border-collapse:collapse;font-size:11px}
+.paper th{background:#eee;text-align:left;font-weight:700;padding:6px;border:1px solid #bbb;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px}
+.paper td{padding:7px 6px;border:1px solid #bbb;position:relative}
+.paper td.n,.paper th.n{text-align:right}
+.paper .tot td{font-weight:700;background:#fafafa}
+.paper .foot{margin-top:26px;font-size:9.5px;color:#777;display:flex;justify-content:space-between}
+.paper .synthetic{position:absolute;top:14px;right:16px;font-size:9px;color:#8a4b00;border:1px solid #e3b56a;padding:1px 6px;border-radius:3px}
+
+/* scanned look for the packing list */
+.scan{background:#F5F4F0;color:#2b2b2b;transform:rotate(-.6deg)}
+.scan th{background:#e4e4e2}
+.scan::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.smudge{position:relative;display:inline-block}
+.smudge::before{content:"";position:absolute;left:30%;right:-6px;top:-3px;bottom:-3px;border-radius:50%;
+  background:radial-gradient(ellipse at 45% 55%,rgba(70,70,70,.42),rgba(70,70,70,.18) 50%,transparent 72%);filter:blur(1px)}
+.smudge b{filter:blur(.5px);font-weight:700}
+
+/* source highlights drawn by the app over the preview — not part of the document */
+.hl{outline:2.5px solid var(--red-500);outline-offset:-1px;background:rgba(214,66,53,.10)!important}
+.hl.ok{outline-color:var(--teal-600);background:rgba(15,127,125,.10)!important}
+.hl.amb{outline-color:var(--amber-500);background:rgba(227,154,34,.14)!important}
+.pin{position:absolute;z-index:3;font-family:var(--font);font-size:10.5px;font-weight:500;color:#fff;background:var(--red-700);padding:1px 6px;border-radius:3px;white-space:nowrap;top:-19px;right:-3px;filter:none}
+.pin.ok{background:var(--teal-700)}
+.pin.amb{background:var(--amber-800)}

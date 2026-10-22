@@ -1,0 +1,42 @@
+services:
+  app:
+    build: .
+    ports: ["3001:3001"]
+    environment:
+      APP_ORIGIN: http://localhost:3001
+      DATABASE_URL: postgresql://cargo:cargo_local@postgres:5432/cargocheck
+      REDIS_URL: redis://redis:6379
+      EXTRACTION_PROVIDER: ${EXTRACTION_PROVIDER:-local}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+    volumes: ["documents:/app/data"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: cargocheck
+      POSTGRES_USER: cargo
+      POSTGRES_PASSWORD: cargo_local
+    volumes: ["postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cargo -d cargocheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes: ["redis:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  postgres:
+  documents:
+  redis:

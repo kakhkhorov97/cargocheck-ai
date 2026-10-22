@@ -1,0 +1,34 @@
+{
+  "name": "@cargo/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --import tsx --env-file-if-exists=../../.env src/main.ts",
+    "build": "tsc --noEmit",
+    "start": "node --import tsx --env-file-if-exists=../../.env src/main.ts"
+  },
+  "dependencies": {
+    "@cargo/shared": "*",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.0",
+    "multer": "^2.0.0",
+    "helmet": "^8.0.0",
+    "cookie-parser": "^1.4.7",
+    "express-rate-limit": "^8.0.0",
+    "pg": "^8.0.0",
+    "bullmq": "^5.0.0",
+    "ioredis": "^5.0.0",
+    "pdfkit": "^0.17.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/multer": "^2.0.0",
+    "@types/cookie-parser": "^1.4.0",
+    "@types/pg": "^8.0.0",
+    "@types/pdfkit": "^0.17.0"
+  }
+}
