@@ -42,7 +42,7 @@ export function parseText(pages: string[]): Extraction {
     if (
       v.length < 4 ||
       /^(?:code|product code)$/i.test(v[0]) ||
-      !/^\d+(?:\.\d+)?$/.test(v[2])
+      !/^-?\d+(?:\.\d+)?$/.test(v[2])
     )
       continue;
     const f = (value: string | undefined): Field => ({
