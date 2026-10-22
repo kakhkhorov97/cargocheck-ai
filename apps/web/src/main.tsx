@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useId } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Box,
@@ -1307,10 +1307,11 @@ function FieldEditor({
   onSource: () => void;
 }) {
   const [value, setValue] = useState(field.value ?? "");
+  const inputId = useId();
   return (
     <div className="field-row">
       <div className="field-label">
-        <label>{label}</label>
+        <label htmlFor={inputId}>{label}</label>
         {field.confirmed ? (
           <span className="confirmed">
             <CheckCircle2 size={12} />
@@ -1322,7 +1323,7 @@ function FieldEditor({
       </div>
       <div className="field-input">
         <input
-          aria-label={label}
+          id={inputId}
           value={value}
           placeholder="Not stated"
           onChange={(e) => setValue(e.target.value)}
