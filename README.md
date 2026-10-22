@@ -54,7 +54,7 @@ You can also create a review and upload your own PDF/JPG/PNG (10 MB per file; lo
 
 ## Extraction modes
 
-### Local mode (default; no AI key)
+### Local OCR (default; no AI key)
 
 Local mode performs real OCR/text extraction, then explicit template parsing. **It is not general-purpose AI extraction.** It recognises labelled lines and pipe-separated item rows, like the included PDFs:
 
@@ -70,7 +70,7 @@ BOOK-01 | Children's Book | 100 | pieces | 2.50 | 250.00
 
 Unrecognised layouts may produce missing fields or no items. Add a line and enter confirmed values manually, or configure cloud extraction. OCR is English-only in this release; install/configure additional language data before expanding language claims.
 
-### Gemini mode (optional; needs your own API access)
+### Gemini cloud (optional; needs your own API access)
 
 In `.env`, set:
 
@@ -80,7 +80,7 @@ GEMINI_API_KEY=your-key-set-locally
 GEMINI_MODEL=your-supported-model-name
 ```
 
-Restart the API. The interface indicates cloud extraction. Uploaded documents are sent to Google's Gemini API in this mode. The model name is intentionally configurable; choose one enabled for your account and compatible with document input and structured JSON output. Never paste credentials into source files or commit `.env`.
+Restart the API. The sidebar shows **Gemini cloud**. Uploaded documents are sent to Google's Gemini API in this mode. The model name is intentionally configurable; choose one enabled for your account and compatible with document input and structured JSON output. Never paste credentials into source files or commit `.env`.
 
 The adapter is implemented but has **not been exercised against a live paid provider in this build**, because no API credentials were supplied. Validate it with synthetic documents before relying on it. Schema validity does not prove factual correctness, and model-provided source references must be verified by the reviewer.
 
