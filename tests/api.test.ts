@@ -51,6 +51,17 @@ test("non-JSON API failures retain the status fallback", async (t) => {
   });
 });
 
+test("rate limits ask the user to wait before retrying", async (t) => {
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () => new Response("Too many requests", { status: 429 }),
+  );
+  await assert.rejects(api("/auth/login", { email: "reviewer@example.com" }), {
+    message: "Too many requests. Wait a few minutes before trying again.",
+  });
+});
+
 test("unreadable successful responses explain how to recover", async (t) => {
   t.mock.method(
     globalThis,

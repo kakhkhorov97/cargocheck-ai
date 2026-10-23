@@ -99,6 +99,8 @@ Open http://localhost:3001 for the built frontend and API. Compose starts Postgr
 
 Alternatively start your own PostgreSQL/Redis services and set `DATABASE_URL`/`REDIS_URL` in `.env` for local development. No database or Redis URL is needed for the default development workflow.
 
+When `NODE_ENV=production`, startup requires a valid `DATABASE_URL` using the `postgres://` or `postgresql://` scheme. The database host must not be localhost, a loopback address, or an unspecified address such as `0.0.0.0`. Use the hostname of your PostgreSQL service. Local-file storage is available only outside production. These startup checks do not verify database connectivity or make the development Compose configuration suitable for production.
+
 **Storage implementation:** the initial PostgreSQL adapter uses one transaction-locked JSONB state row. This makes the vertical slice straightforward, but is not a scalable relational schema. Normalised tables, migrations, indexing and scoped queries are a planned milestone. Original files use private local disk, not S3 yet. The first queue worker runs in the API process; a standalone worker entrypoint is pending.
 
 The Docker/PostgreSQL/Redis configuration has not been integration-tested here because Docker and those services were unavailable. The local-file/in-process path is the tested one.

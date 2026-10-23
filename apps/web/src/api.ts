@@ -21,7 +21,10 @@ export async function api<T>(
     );
   }
   if (!r.ok) {
-    let message = `Request failed (${r.status}). Please try again.`;
+    let message =
+      r.status === 429
+        ? "Too many requests. Wait a few minutes before trying again."
+        : `Request failed (${r.status}). Please try again.`;
     try {
       const e = await r.json();
       if (typeof e?.message === "string" && e.message.trim()) {
