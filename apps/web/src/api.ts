@@ -36,5 +36,11 @@ export async function api<T>(
     } catch {}
     throw new Error(message);
   }
-  return r.json();
+  try {
+    return await r.json();
+  } catch {
+    throw new Error(
+      "The server returned an unreadable response. Please try again.",
+    );
+  }
 }

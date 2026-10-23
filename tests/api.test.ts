@@ -50,3 +50,20 @@ test("non-JSON API failures retain the status fallback", async (t) => {
     message: "Request failed (502). Please try again.",
   });
 });
+
+test("unreadable successful responses explain how to recover", async (t) => {
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () => new Response("<html>Proxy error</html>", { status: 200 }),
+  );
+  await assert.rejects(api("/shipments"), {
+    message: "The server returned an unreadable response. Please try again.",
+  });
+});
+
+test("successful API responses retain their JSON payload", async (t) => {
+  const payload = [{ id: "shipment-1", reference: "SH-001" }];
+  t.mock.method(globalThis, "fetch", async () => Response.json(payload));
+  assert.deepEqual(await api("/shipments"), payload);
+});
