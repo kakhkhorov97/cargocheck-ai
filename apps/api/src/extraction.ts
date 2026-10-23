@@ -14,13 +14,11 @@ export function parseText(pages: string[]): Extraction {
   const e = blankExtraction();
   const lines = pages
     .flatMap((text, page) =>
-      text
-        .split("\n")
-        .map((text, line) => ({
-          text: text.trim(),
-          page: page + 1,
-          line: line + 1,
-        })),
+      text.split("\n").map((text, line) => ({
+        text: text.trim(),
+        page: page + 1,
+        line: line + 1,
+      })),
     )
     .filter((l) => l.text);
   const field = (pattern: RegExp): Field => {
@@ -177,10 +175,18 @@ export async function extractDocument(
       }),
     },
   );
-  if (!response.ok)
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    const message = String(detail?.error?.message ?? "No provider details")
+      .replaceAll(process.env.GEMINI_API_KEY!, "[REDACTED]")
+      .slice(0, 1000);
+
+    console.error("Gemini request rejected:", response.status, message);
+
     throw new Error(
       `Cloud extraction failed (${response.status}). Check provider configuration or retry later.`,
     );
+  }
   const data = (await response.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
   };
