@@ -129,6 +129,25 @@ export class ApiController {
     @Inject("STORE") private db: Store,
     @Inject("JOBS") private work: Jobs,
   ) {}
+  private async enqueueExtraction(
+    id: string,
+    kind: DocKind,
+    documentId: string,
+  ) {
+    try {
+      await this.work.enqueue(id, kind, documentId);
+    } catch {
+      await this.db.transaction((s) => {
+        const x = s.shipments.find((x) => x.id === id);
+        const d = x?.documents[kind];
+        if (!x || !d || d.id !== documentId || d.status !== "queued") return;
+        d.status = "failed";
+        d.error = "Could not queue extraction. Check Redis and retry.";
+        x.version++;
+        x.updatedAt = now();
+      });
+    }
+  }
   @Get("health") health() {
     return {
       ok: true,
@@ -302,8 +321,8 @@ export class ApiController {
       return x;
     });
     for (const d of Object.values(x.documents))
-      await this.work.enqueue(x.id, d.kind, d.id);
-    return safeShipment(x);
+      await this.enqueueExtraction(x.id, d.kind, d.id);
+    return this.get(x.id, req);
   }
   @Post("shipments") create(@Body() body: unknown, @Req() req: Request) {
     const { reference } = z
@@ -377,7 +396,7 @@ export class ApiController {
         .replace(/[\r\n\x00-\x1f]/g, "")
         .slice(0, 180) || "document";
     const target = path.join(this.db.root, "files", documentId);
-    const result = await this.db.transaction(async (s) => {
+    await this.db.transaction(async (s) => {
       const x = shipment(s, req, id);
       version(x, Number(req.body.version));
       if (
@@ -410,18 +429,8 @@ export class ApiController {
       changed(x, req, "uploaded", `${kind}: ${filename}`);
       return safeShipment(x);
     });
-    try {
-      await this.work.enqueue(id, kind, documentId);
-    } catch {
-      await this.db.transaction((s) => {
-        const x = shipment(s, req, id);
-        const d = x.documents[kind]!;
-        d.status = "failed";
-        d.error = "Could not queue extraction. Check Redis and retry.";
-        x.version++;
-      });
-    }
-    return result;
+    await this.enqueueExtraction(id, kind, documentId);
+    return this.get(id, req);
   }
   @Get("shipments/:id/documents/:kind/file") async file(
     @Param("id") id: string,
@@ -462,7 +471,7 @@ export class ApiController {
       changed(x, req, "retry", `${kind}; previous extraction ${previous}`);
       return d;
     });
-    await this.work.enqueue(id, kind, doc.id);
+    await this.enqueueExtraction(id, kind, doc.id);
     return { ok: true };
   }
   @Patch("shipments/:id/fields") update(
