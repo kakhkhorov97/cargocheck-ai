@@ -176,11 +176,15 @@ export async function extractDocument(
   );
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
-    const message = String(detail?.error?.message ?? "No provider details")
-      .replaceAll(process.env.GEMINI_API_KEY!, "[REDACTED]")
-      .slice(0, 1000);
+    let diagnostic = JSON.stringify(detail ?? "No provider details");
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey) diagnostic = diagnostic.replaceAll(apiKey, "[REDACTED]");
 
-    console.error("Gemini request rejected:", response.status, message);
+    console.error(
+      "Gemini request rejected:",
+      response.status,
+      diagnostic.slice(0, 12000),
+    );
 
     throw new Error(
       `Cloud extraction failed (${response.status}). Check provider configuration or retry later.`,
