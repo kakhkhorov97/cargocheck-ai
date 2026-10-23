@@ -37,11 +37,12 @@ export class Store {
           );
           const state = rows[0].data as State;
           const result = await fn(state);
+          const detached = structuredClone(result);
           await c.query("UPDATE cargo_state SET data=$1 WHERE id=1", [
             JSON.stringify(state),
           ]);
           await c.query("COMMIT");
-          return result;
+          return detached;
         } catch (e) {
           await c.query("ROLLBACK");
           throw e;
