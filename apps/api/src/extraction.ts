@@ -170,7 +170,6 @@ export async function extractDocument(
         generationConfig: {
           responseMimeType: "application/json",
           responseJsonSchema: schema,
-          temperature: 0,
         },
       }),
     },
