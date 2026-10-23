@@ -3,5 +3,11 @@
   "framework": "vite",
   "installCommand": "npm ci --include=dev --workspaces --include-workspace-root",
   "buildCommand": "npm run build -w @cargo/shared && npm run build -w @cargo/web",
-  "outputDirectory": "apps/web/dist"
+  "outputDirectory": "apps/web/dist", 
+  "rewrites": [
+  {
+    "source": "/api/:path*",
+    "destination": "https://cargocheck-ai.onrender.com/api/:path*"
+  }
+]
 }
