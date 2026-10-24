@@ -1,7 +1,7 @@
 import { loadEnvFile } from "node:process";
 import path from "node:path";
 import PDFDocument from "pdfkit";
-import { z } from "zod";
+import { buildGeminiExtractionSchema } from "../apps/api/src/extraction";
 import { extractionSchema } from "@cargo/shared";
 
 // Existing shell variables take precedence. Never print configuration or payloads.
@@ -20,8 +20,7 @@ if (!key || !model) {
   process.exit(1);
 }
 const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-const schema = z.toJSONSchema(extractionSchema);
-delete schema.$schema;
+const schema = buildGeminiExtractionSchema();
 const text =
   "Fictional invoice. Shipment reference: TEST-001. Seller: Fictional Export Co. Consignee: Fictional Import Co. Address: 1 Example Street. Currency: USD. One BOOK-01 item, quantity 1 pieces, unit price 2.50, line total 2.50. Extract the facts; use null for missing values and false for confirmed flags.";
 const tiny = {

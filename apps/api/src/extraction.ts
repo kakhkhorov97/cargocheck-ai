@@ -116,6 +116,17 @@ export async function localText(file: string, mime: string): Promise<string[]> {
     ).stdout,
   ];
 }
+export function buildGeminiExtractionSchema() {
+  // Gemini rejects the complex line-item schema with maxItems: 200. Keep the
+  // application limit in extractionSchema.parse, outside constrained decoding.
+  const schema = z.toJSONSchema(
+    extractionSchema.extend({
+      items: z.array(extractionSchema.shape.items.element),
+    }),
+  );
+  delete schema.$schema;
+  return schema;
+}
 export async function extractDocument(
   doc: DocumentRecord,
 ): Promise<{ extraction: Extraction; pages: string[]; provider: string }> {
@@ -133,8 +144,7 @@ export async function extractDocument(
     );
   // Never derive source locations from model confidence. Every location is a claim
   // to review; provider output is schema-validated and remains unconfirmed.
-  const schema = z.toJSONSchema(extractionSchema);
-  delete schema.$schema;
+  const schema = buildGeminiExtractionSchema();
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(process.env.GEMINI_MODEL)}:generateContent`,
     {

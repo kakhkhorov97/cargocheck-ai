@@ -1,7 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseText } from "../apps/api/src/extraction";
-import { validateShipment } from "@cargo/shared";
+import {
+  buildGeminiExtractionSchema,
+  parseText,
+} from "../apps/api/src/extraction";
+import {
+  blankExtraction,
+  extractionSchema,
+  itemSchema,
+  validateShipment,
+} from "@cargo/shared";
+import { z } from "zod";
 import type { Shipment, DocumentRecord } from "@cargo/shared";
 
 test("local extraction preserves negative quantities for validation", () => {
@@ -53,4 +62,25 @@ test("local extraction still ignores table headers and nonnumeric rows", () => {
     "Code | Description | Quantity | Unit\nBOOK-01 | Book | unknown | pieces",
   ]);
   assert.equal(extraction.items.length, 0);
+});
+
+test("Gemini schema omits only the provider-rejected item limit; application still enforces it", () => {
+  const expected = z.toJSONSchema(extractionSchema);
+  delete expected.$schema;
+  delete expected.properties!.items.maxItems;
+  assert.deepEqual(buildGeminiExtractionSchema(), expected);
+
+  const extraction = blankExtraction();
+  const item = itemSchema.parse({
+    code: extraction.shipmentRef,
+    description: extraction.shipmentRef,
+    quantity: extraction.shipmentRef,
+    unit: extraction.shipmentRef,
+    unitPrice: extraction.shipmentRef,
+    lineTotal: extraction.shipmentRef,
+  });
+  extraction.items = Array.from({ length: 200 }, () => structuredClone(item));
+  assert.equal(extractionSchema.safeParse(extraction).success, true);
+  extraction.items.push(structuredClone(item));
+  assert.equal(extractionSchema.safeParse(extraction).success, false);
 });
