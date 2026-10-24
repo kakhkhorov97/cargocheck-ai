@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useId } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  Box,
   LayoutDashboard,
   FileCheck2,
   ArrowUpRight,
@@ -234,10 +233,13 @@ function App() {
   );
   return (
     <>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <header className="topbar">
         <button className="brand" onClick={() => setView("dashboard")}>
           <span className="mark">
-            <Box size={22} />
+            <img src="/favicon.svg" width="36" height="36" alt="" />
           </span>
           CargoCheck <span className="ai">AI</span>
         </button>
@@ -275,6 +277,7 @@ function App() {
         <aside className="sidebar">
           <p className="eyebrow">WORKSPACE</p>
           <button
+            aria-current={view === "dashboard" ? "page" : undefined}
             className={view === "dashboard" ? "nav active" : "nav"}
             onClick={() => setView("dashboard")}
           >
@@ -284,6 +287,7 @@ function App() {
           {selected && (
             <>
               <button
+                aria-current={view === "review" ? "page" : undefined}
                 className={view === "review" ? "nav active" : "nav"}
                 onClick={() => setView("review")}
               >
@@ -291,6 +295,7 @@ function App() {
                 Document review
               </button>
               <button
+                aria-current={view === "report" ? "page" : undefined}
                 className={view === "report" ? "nav active" : "nav"}
                 onClick={() => setView("report")}
               >
@@ -298,6 +303,7 @@ function App() {
                 Validation report
               </button>
               <button
+                aria-current={view === "activity" ? "page" : undefined}
                 className={view === "activity" ? "nav active" : "nav"}
                 onClick={() => setView("activity")}
               >
@@ -337,7 +343,11 @@ function App() {
             </details>
           </div>
         </aside>
-        <main className={view === "review" ? "main review-main" : "main"}>
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={view === "review" ? "main review-main" : "main"}
+        >
           {error && (
             <div role="alert" className="banner error">
               <AlertCircle size={18} />
@@ -357,7 +367,6 @@ function App() {
             <>
               <div className="page-heading">
                 <div>
-                  <p className="eyebrow">DOCUMENT OPERATIONS</p>
                   <h1>Shipment reviews</h1>
                   <p>Catch the difference. Keep the evidence.</p>
                 </div>
@@ -429,6 +438,7 @@ function App() {
                   {["All reviews", "In progress", "Reviewed"].map((t) => (
                     <button
                       key={t}
+                      aria-pressed={filter === t}
                       className={filter === t ? "on" : ""}
                       onClick={() => setFilter(t)}
                     >
@@ -448,15 +458,20 @@ function App() {
               </div>
               <div className="table-scroll">
                 <table className="reviews-table">
+                  <caption className="sr-only">
+                    Shipment document reviews and their current status
+                  </caption>
                   <thead>
                     <tr>
-                      <th>Shipment</th>
-                      <th>Trading parties</th>
-                      <th>Documents</th>
-                      <th>Processing</th>
-                      <th>Human review</th>
-                      <th>Updated</th>
-                      <th />
+                      <th scope="col">Shipment</th>
+                      <th scope="col">Trading parties</th>
+                      <th scope="col">Documents</th>
+                      <th scope="col">Processing</th>
+                      <th scope="col">Human review</th>
+                      <th scope="col">Updated</th>
+                      <th scope="col">
+                        <span className="sr-only">Open review</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -869,21 +884,49 @@ function Auth({ onAuth }: { onAuth: (u: User) => void }) {
       <section className="auth-story">
         <div className="brand">
           <span className="mark">
-            <Box size={24} />
+            <img src="/favicon.svg" width="36" height="36" alt="" />
           </span>
           CargoCheck AI
         </div>
         <div>
-          <p className="eyebrow">EVERY DETAIL COUNTS</p>
           <h1>
-            Confidence starts
-            <br />
+            Confidence starts <br />
             with the documents.
           </h1>
           <p>
             One workspace to compare shipping documents, inspect the evidence,
             and record decisions with care.
           </p>
+          <div
+            className="document-example"
+            aria-label="Fictional quantity comparison example"
+          >
+            <div className="example-heading">
+              <span>Fictional sample</span>
+              <span>BOOK-01</span>
+            </div>
+            <div className="example-documents">
+              <div>
+                <FileText size={18} />
+                <span>Commercial invoice</span>
+                <strong>
+                  100 <small>pieces</small>
+                </strong>
+              </div>
+              <div>
+                <FileText size={18} />
+                <span>Packing list</span>
+                <strong>
+                  90 <small>pieces</small>
+                </strong>
+              </div>
+            </div>
+            <div className="example-result">
+              <AlertTriangle size={15} />
+              <span>Quantity differs</span>
+              <span>Review the originals</span>
+            </div>
+          </div>
           <div className="auth-flow">
             <span>
               <FileText />
@@ -926,7 +969,6 @@ function Auth({ onAuth }: { onAuth: (u: User) => void }) {
             }
           }}
         >
-          <span className="eyebrow">YOUR REVIEW WORKSPACE</span>
           <h2>{register ? "Create your account" : "Welcome back"}</h2>
           <p>
             {register
