@@ -1,4 +1,3 @@
-import { MockVerificationMailer } from "./helpers/verification";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -20,8 +19,7 @@ test("queue failures leave uploads, retries and samples recoverable", async (t) 
   const enqueue = t.mock.method(jobs, "enqueue", async () => {
     throw new Error("Redis unavailable");
   });
-  const mailer = new MockVerificationMailer();
-  const api = new ApiController(store, jobs, mailer);
+  const api = new ApiController(store, jobs);
   const cookies: Record<string, string> = {};
   const res = {
     cookie: (key: string, value: string) => {
@@ -32,11 +30,6 @@ test("queue failures leave uploads, retries and samples recoverable", async (t) 
   try {
     await store.init();
     await api.register(
-      { email: "queue@example.com", password: "test-password-123" },
-      res,
-    );
-    await api.verifyEmail({ token: mailer.messages[0].token });
-    await api.login(
       { email: "queue@example.com", password: "test-password-123" },
       res,
     );

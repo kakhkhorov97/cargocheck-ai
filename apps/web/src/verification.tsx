@@ -1,3 +1,4 @@
+// Deferred UI: not imported or routed by the active application.
 import { useEffect, useState } from "react";
 import { api, ApiError } from "./api";
 

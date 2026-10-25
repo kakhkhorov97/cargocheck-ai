@@ -8,7 +8,7 @@ import express from "express";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { AppModule, store, jobs } from "./app";
-import { Errors, verificationRateLimit } from "./auth-http";
+import { Errors, authenticationRateLimit } from "./auth-http";
 
 const app = await NestFactory.create(AppModule, {
   logger: ["error", "warn", "log"],
@@ -36,19 +36,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     return res.status(403).json({ message: "Origin not allowed." });
   next();
 });
-app.use(
-  ["/api/auth/verify-email", "/api/auth/resend-verification"],
-  verificationRateLimit(),
-);
-app.use(
-  "/api/auth",
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 30,
-    standardHeaders: "draft-8",
-    legacyHeaders: false,
-  }),
-);
+app.use("/api/auth", authenticationRateLimit());
 app.use(
   "/api",
   rateLimit({

@@ -45,12 +45,7 @@ import type {
 } from "@cargo/shared";
 import { Store } from "./store";
 import { Jobs } from "./jobs";
-import { SmtpVerificationMailer, type VerificationMailer } from "./email";
-import {
-  EmailVerificationService,
-  emailInput,
-  normalizeEmail,
-} from "./verification";
+import { emailInput, normalizeEmail } from "./auth-input";
 
 export const store = new Store();
 export const jobs = new Jobs(store);
@@ -86,8 +81,6 @@ function owner(s: State, req: Request): User {
   const user =
     s.users.find((x) => x.id === session!.userId) ??
     fail("Please sign in.", 401);
-  if (!user.emailVerifiedAt)
-    fail("Verify your email before accessing shipment reviews.", 403);
   return user;
 }
 function shipment(s: State, req: Request, id: string): Shipment {
@@ -132,18 +125,7 @@ export class ApiController {
   constructor(
     @Inject("STORE") private db: Store,
     @Inject("JOBS") private work: Jobs,
-    @Inject("MAILER")
-    private mailer: VerificationMailer = new SmtpVerificationMailer(),
   ) {}
-  private get verification() {
-    return new EmailVerificationService(this.db, this.mailer);
-  }
-  @Post("auth/verify-email") verifyEmail(@Body() body: unknown) {
-    return this.verification.verify(body);
-  }
-  @Post("auth/resend-verification") resendVerification(@Body() body: unknown) {
-    return this.verification.resend(body);
-  }
   private async enqueueExtraction(
     id: string,
     kind: DocKind,
@@ -182,71 +164,54 @@ export class ApiController {
       return { id, email, name };
     });
   }
-  @Post("auth/register") async register(
-    @Body() body: unknown,
-    @Res({ passthrough: true }) _res: Response,
-  ) {
-    const c = credentials.parse(body);
-    this.mailer.assertConfigured();
-    await this.db.transaction((s) => {
-      if (s.users.some((u) => normalizeEmail(u.email) === c.email))
-        fail(
-          "An account already exists for this email. Sign in or request verification.",
-          409,
-        );
-      const salt = randomBytes(16).toString("hex");
-      s.users.push({
-        id: randomUUID(),
-        email: c.email,
-        name: c.name ?? c.email.split("@")[0],
-        password: salt + ":" + scryptSync(c.password, salt, 64).toString("hex"),
-        emailVerifiedAt: null,
-      });
-    });
-    const delivery = await this.verification.issue(c.email);
-    if (delivery.status !== "accepted")
-      throw new HttpException(
-        {
-          code: "EMAIL_DELIVERY_FAILED",
-          message:
-            "Your account is unverified. Request a verification link after the 60-second cooldown.",
-        },
-        503,
-      );
-    return {
-      verificationRequired: true,
-      email: c.email,
-      retryAfter: 60,
-      message:
-        "The email service accepted your verification email. Check your inbox and spam folder. The link expires in 30 minutes.",
-    };
-  }
-  @Post("auth/login") async login(
+  @Post("auth/register") register(
     @Body() body: unknown,
     @Res({ passthrough: true }) res: Response,
   ) {
+    return this.auth(body, res, true);
+  }
+  @Post("auth/login") login(
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth(body, res, false);
+  }
+  private async auth(body: unknown, res: Response, register: boolean) {
     const c = credentials.parse(body);
     const token = randomBytes(32).toString("hex");
     const user = await this.db.transaction((s) => {
-      const u = s.users.find((x) => normalizeEmail(x.email) === c.email);
-      const [salt, h] = u?.password.split(":") ?? ["missing", "00".repeat(64)];
-      if (
-        !timingSafeEqual(
-          scryptSync(c.password, salt, 64),
-          Buffer.from(h, "hex"),
-        ) ||
-        !u
-      )
-        return fail("Email or password is incorrect.", 401);
-      if (!u.emailVerifiedAt)
-        throw new HttpException(
-          {
-            code: "EMAIL_NOT_VERIFIED",
-            message:
-              "Verify your email before signing in. Request a verification link below.",
-          },
-          403,
-        );
+      let u = s.users.find((x) => normalizeEmail(x.email) === c.email);
+      if (register) {
+        if (u)
+          return fail(
+            "An account already exists for this email. Sign in instead.",
+            409,
+          );
+        const salt = randomBytes(16).toString("hex");
+        u = {
+          id: randomUUID(),
+          email: c.email,
+          name: c.name ?? c.email.split("@")[0],
+          password:
+            salt + ":" + scryptSync(c.password, salt, 64).toString("hex"),
+          // Password authentication does not establish email ownership.
+          emailVerifiedAt: null,
+        };
+        s.users.push(u);
+      } else {
+        const [salt, h] = u?.password.split(":") ?? [
+          "missing",
+          "00".repeat(64),
+        ];
+        if (
+          !timingSafeEqual(
+            scryptSync(c.password, salt, 64),
+            Buffer.from(h, "hex"),
+          ) ||
+          !u
+        )
+          return fail("Email or password is incorrect.", 401);
+      }
       s.sessions = s.sessions.filter((x) => x.expiresAt > Date.now());
       s.sessions.push({
         hash: hash(token),
@@ -754,7 +719,6 @@ export class ApiController {
   providers: [
     { provide: "STORE", useValue: store },
     { provide: "JOBS", useValue: jobs },
-    { provide: "MAILER", useValue: new SmtpVerificationMailer() },
   ],
 })
 export class AppModule {}

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { HttpException } from "@nestjs/common";
 import type { ArgumentsHost } from "@nestjs/common";
-import { verificationRateLimit, Errors } from "../apps/api/src/auth-http";
+import { authenticationRateLimit, Errors } from "../apps/api/src/auth-http";
 import { z } from "zod";
 
 function response() {
@@ -25,18 +25,15 @@ function response() {
   };
 }
 
-test("HTTP exception filter preserves safe verification error codes", () => {
+test("HTTP exception filter preserves safe authentication error codes", () => {
   const f = response();
   new Errors().catch(
-    new HttpException(
-      { code: "EMAIL_NOT_VERIFIED", message: "Verify your email." },
-      403,
-    ),
+    new HttpException({ code: "AUTH_FAILED", message: "Please sign in." }, 403),
     f.host,
   );
   assert.deepEqual(f.result(), {
     status: 403,
-    body: { code: "EMAIL_NOT_VERIFIED", message: "Verify your email." },
+    body: { code: "AUTH_FAILED", message: "Please sign in." },
   });
 });
 
@@ -60,11 +57,11 @@ test("validation errors omit raw tokens and unexpected errors are redacted in lo
   );
 });
 
-test("verification limiter blocks the sixteenth request from the same IP", async () => {
+test("authentication limiter blocks the thirty-first request from the same IP", async () => {
   // Exercise the actual Express middleware without opening a network port.
-  const limiter = verificationRateLimit();
+  const limiter = authenticationRateLimit();
   let limited: any;
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 31; i++) {
     let nextCalled = false;
     const req: any = {
       method: "POST",
@@ -94,8 +91,8 @@ test("verification limiter blocks the sixteenth request from the same IP", async
       if (error) throw error;
       nextCalled = true;
     });
-    assert.equal(nextCalled, i < 15);
+    assert.equal(nextCalled, i < 30);
   }
   assert.equal(limited.status, 429);
-  assert.match(limited.body.message, /Too many verification requests/);
+  assert.match(limited.body.message, /Too many authentication requests/);
 });

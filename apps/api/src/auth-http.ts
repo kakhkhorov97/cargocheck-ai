@@ -30,14 +30,14 @@ export class Errors implements ExceptionFilter {
       .json({ message: "The request could not be completed. Try again." });
   }
 }
-export function verificationRateLimit() {
+export function authenticationRateLimit() {
   return rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 15,
+    limit: 30,
     standardHeaders: "draft-8",
     legacyHeaders: false,
     message: {
-      message: "Too many verification requests. Try again in 15 minutes.",
+      message: "Too many authentication requests. Try again in 15 minutes.",
     },
   });
 }

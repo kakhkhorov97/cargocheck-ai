@@ -4,12 +4,8 @@ import { z } from "zod";
 import { Store } from "./store";
 import type { VerificationMailer } from "./email";
 
-export const normalizeEmail = (email: string) => email.trim().toLowerCase();
-export const emailInput = z
-  .string()
-  .trim()
-  .pipe(z.email().max(254))
-  .transform(normalizeEmail);
+// Deferred service: deliberately not registered on the active API controller.
+import { emailInput, normalizeEmail } from "./auth-input";
 const tokenInput = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/) });
 const digest = (token: string) =>
   createHash("sha256").update(token).digest("hex");

@@ -46,13 +46,13 @@ npm run samples
 npm run dev
 ```
 
-Configure the SMTP settings described below, then open **http://localhost:4173**. Create an account, verify your email, sign in, then click **Try sample shipment**. The sample PDFs pass through the actual extraction pipeline, without an AI key.
+Open **http://localhost:4173**. Create an account with your email and password, then click **Try sample shipment**. Registration signs you in immediately; email verification is deferred. The sample PDFs pass through the actual extraction pipeline, without an AI key.
 
 The NestJS API listens at http://localhost:3001. Keep the terminal running. Stop with Ctrl+C. Data and private original files persist in `data/`, which is excluded from Git and from the source archive. Do not run more than one API process against the local-file store.
 
 ### First walkthrough
 
-1. Create an account with a password of at least 10 characters, verify your email using the inbox link, then sign in.
+1. Create an account with a valid email and a password of at least 10 characters. Registration signs you in immediately. Existing users can sign in with their email and password.
 2. Click **Try sample shipment**. Two fictional PDFs are uploaded to your review.
 3. Wait for extraction, then inspect each **Original document** and **Extracted fields** tab.
 4. Confirm the values against the originals. Edit any individual field using its checkmark, or deliberately confirm all fields in a document after review.
@@ -66,7 +66,7 @@ You can also create a review and upload your own PDF/JPG/PNG (10 MB per file; lo
 ## Implemented
 
 - React/TypeScript interface using the supplied navy/teal design tokens: dashboard, original document previews, field editing, source text, report and correction history.
-- NestJS REST API; account registration and login with salted scrypt password hashes; required email ownership verification; hashed opaque session tokens in HTTP-only cookies; logout.
+- NestJS REST API; account registration and login with salted scrypt password hashes; email verification deferred; hashed opaque session tokens in HTTP-only cookies; logout.
 - Account ownership checks on shipment and document access; non-public local files; signature checks for accepted upload formats; rate limiting; same-origin mutation checks; optimistic version checks for stale edits.
 - Local PDF text extraction with Poppler; English OCR with Tesseract for images/scanned PDFs; conservative labelled-template parsing. Unknown fields remain null.
 - Optional Gemini extraction adapter using structured output, server-side credentials, schema validation, explicit untrusted-document instructions and unconfirmed results.
@@ -96,55 +96,23 @@ If the browser tab has no CargoCheck icon:
 
 The favicon source is `apps/web/public/favicon.svg`; its HTML link is in `apps/web/index.html`.
 
-## Email verification and SMTP setup
+## Authentication and deferred email verification
 
-Registration creates an unverified account without a session. The account can access shipment reviews only after its owner follows the inbox link, selects **Verify email**, and signs in. Email verification is also checked on the backend for existing sessions.
+Users can register and sign in with an email and password. Registration signs the user in immediately. Existing unverified accounts can sign in with their current passwords and retain their shipment data. Authentication does not send email or require SMTP or Resend credentials.
 
-There is no production bypass. Missing or invalid SMTP configuration returns HTTP 503 with `EMAIL_CONFIGURATION_ERROR`. Registration does not create an account when configuration is missing. If the SMTP provider rejects delivery after account creation, the account remains unverified and registration returns HTTP 503 with `EMAIL_DELIVERY_FAILED`. Wait 60 seconds, then use **Request a verification link** on the sign-in screen instead of registering again.
+Email format validation, trim-and-lowercase email normalization, unique emails, salted scrypt password hashes, hashed session tokens, HTTP-only cookies, session expiry, logout, and per-user shipment isolation remain enforced. Authentication endpoints retain the limit of 30 requests per IP per 15 minutes, alongside the existing general API limit.
 
-Choose a transactional SMTP provider and verify a sender address or domain using that provider's instructions. Configure its SPF/DKIM records and any required DMARC policy. Put real credentials only in your local `.env` or the backend service's secret environment settings. `.env.example` contains placeholders.
+Email ownership remains separate from password authentication. New accounts have `emailVerifiedAt: null`. Loading a legacy account without this field adds `null`; existing verification timestamps are preserved. Valid sessions are no longer revoked because an account is unverified. Sessions revoked by a previous release cannot be restored; those users simply sign in again. Users, password hashes, shipment ownership, shipment data, and stored verification records are preserved. Normalization collisions stop storage loading and roll back rather than merging or deleting accounts.
 
-For the Render backend, set:
+The active endpoints are `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`. Registration and login return the public user profile and set a session cookie. The verification and resend endpoints are not registered and return 404. The frontend does not route to verification screens or request verification emails, including when opening an old verification URL.
 
-| Variable | Value |
-| --- | --- |
-| `APP_ORIGIN` | `https://cargocheck-ai-web.vercel.app`, the trusted frontend origin without a trailing slash |
-| `SMTP_HOST` | Your provider's SMTP hostname |
-| `SMTP_PORT` | Your provider's SMTP port, usually `587` or `465` |
-| `SMTP_SECURE` | `false` for required STARTTLS, or `true` for implicit TLS |
-| `SMTP_USER` | Your SMTP username |
-| `SMTP_PASSWORD` | Your SMTP password or provider-issued SMTP credential |
-| `SMTP_FROM` | A verified sender email address, such as `verify@your-domain.com` |
-| `COOKIE_SECURE` | `true` in HTTPS production |
-| `NODE_ENV` | `production` |
-| `DATABASE_URL` | Your existing production PostgreSQL connection string |
+`apps/api/src/email.ts`, `apps/api/src/verification.ts`, and `apps/web/src/verification.tsx` remain isolated for future work. They are not wired into the active authentication flow. There is no runtime environment switch to re-enable them; reinstating verification requires an explicit code change and testing.
 
-Keep these settings on Render, not in frontend `VITE_*` variables. Use an SMTP provider and port that your Render service can reach. [Render free web services block SMTP ports 25, 465, and 587](https://render.com/docs/free), and port 25 is blocked for all services. Confirm an allowed provider-supported submission port or suitable hosting before deployment; no service purchase or hosting change is performed by this task. Nodemailer requires encrypted SMTP and validates TLS certificates. SMTP acceptance confirms handoff to the provider, not inbox placement or later delivery. See the [Nodemailer SMTP documentation](https://nodemailer.com/smtp).
+### Deployment configuration
 
-Verification links are built only from `APP_ORIGIN`. Production requires HTTPS; local development permits `http://localhost:4173`. Tokens use 32 cryptographically random bytes, expire after 30 minutes, and are stored only as SHA-256 hashes. The link uses `/?verify-email#token=...` so the token is not sent in access-log URLs or referrer headers. The page clears the fragment and submits the token in a POST body only when the user selects **Verify email**. Do not configure request-body logging for authentication endpoints or SMTP debug logging.
+No new environment variables are required. Keep `APP_ORIGIN` set to the exact trusted frontend origin, such as `https://cargocheck-ai-web.vercel.app`, because it still controls allowed request origins. Keep `COOKIE_SECURE=true` for HTTPS production and preserve the existing `NODE_ENV`, `DATABASE_URL`, extraction, and queue settings. SMTP and Resend variables can remain unset or be removed from Render; authentication ignores them even if they are configured. No production database maintenance or email service setup is required for this change.
 
-Endpoints:
-
-- `POST /api/auth/register`: accepts `email`, `password`, and optional `name`. Returns `verificationRequired` only after SMTP acceptance; does not sign in.
-- `POST /api/auth/verify-email`: accepts `token`. Returns `success`, `expired`, `invalid`, or `already_used`. Successful consumption and user verification are atomic.
-- `POST /api/auth/resend-verification`: accepts `email`. Enforces a persisted 60-second per-account cooldown. Issuing a replacement invalidates older unused links, including when replacement delivery fails.
-- `POST /api/auth/login`: requires a verified account. Correct credentials for an unverified account return HTTP 403 with `EMAIL_NOT_VERIFIED`.
-
-Verification and resend endpoints share a limit of 15 requests per IP per 15 minutes, in addition to the existing authentication limits. Public resend responses are identical for unknown, verified, cooldown-limited, and delivery-failed accounts. They explicitly do not confirm delivery. Configuration errors are returned equally for every address. A failed SMTP attempt invalidates its token, preserves the cooldown, and leaves the account unverified. Used, expired, and invalidated token hashes are retained for up to a day after expiry, then pruned when issuing links.
-
-### Existing-account migration policy
-
-Before deploying this change, back up the production `cargo_state` record and configure SMTP. This task does not run a production migration or access the production database.
-
-At the next backend startup, the store applies an idempotent migration in a transaction. Accounts without a verification timestamp receive `emailVerifiedAt: null`. Users, password hashes, shipment ownership, and shipment data remain intact. Sessions belonging to unverified accounts are removed. No existing account is silently marked verified. Emails use the existing trim-and-lowercase normalization consistently. If legacy records collide after normalization, migration stops and rolls back rather than deleting or merging users. An administrator must resolve the conflicting records from a backup-aware maintenance process before restarting.
-
-Existing users select **Request a verification link** on the sign-in screen, enter their email, verify the new link, and sign in with their existing password. Verification does not restore old sessions. Records already verified by this implementation keep their verification timestamp on later restarts.
-
-### Verification checks
-
-Automated tests use in-memory mocked email delivery and temporary local storage. They do not email real users or access the production database. Run `npm test`, `npm run typecheck`, and `npm run build`.
-
-After configuring a real SMTP service and deploying separately, verify delivery with an account you control, including inbox/spam placement, the public link origin, successful verification and sign-in, resend replacement, expiry, and the legacy-user flow. These live delivery checks remain required; mocked tests cannot prove provider credentials, DNS configuration, network reachability, or inbox delivery.
+Deploy the frontend and backend together in a separate deployment step so both use the restored password-only flow. This task does not deploy, contact real email recipients, or modify production data. Tests use temporary local storage and mock the dormant SMTP code. When email ownership verification is added later, sender setup, delivery testing, token handling, and an explicit existing-account policy must be revisited.
 
 ## Extraction modes
 

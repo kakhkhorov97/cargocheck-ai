@@ -3,15 +3,16 @@ import path from "node:path";
 import { Pool } from "pg";
 import type { State } from "@cargo/shared";
 import { validateProductionDatabase } from "./production-config";
+import { normalizeEmail } from "./auth-input";
 
 const empty = (): State => ({ users: [], sessions: [], shipments: [] });
-// Explicit, idempotent migration: legacy accounts must prove email ownership.
-// Keep users and shipments; revoke sessions that predate verification.
+// Normalize legacy records without claiming email ownership or revoking sessions.
+// Email verification is deferred; existing ownership timestamps remain accurate.
 function migrate(state: State) {
   state.emailVerifications ??= [];
   const emails = new Set<string>();
   for (const user of state.users) {
-    user.email = user.email.trim().toLowerCase();
+    user.email = normalizeEmail(user.email);
     if (emails.has(user.email))
       throw new Error(
         "Account migration blocked: duplicate normalized emails require administrator resolution. No accounts were deleted.",
@@ -19,11 +20,6 @@ function migrate(state: State) {
     emails.add(user.email);
     user.emailVerifiedAt ??= null;
   }
-  state.sessions = state.sessions.filter((session) =>
-    state.users.some(
-      (user) => user.id === session.userId && user.emailVerifiedAt,
-    ),
-  );
 }
 export class Store {
   private tail: Promise<unknown> = Promise.resolve();

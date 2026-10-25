@@ -1,4 +1,3 @@
-import { MockVerificationMailer } from "./helpers/verification";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
@@ -21,8 +20,7 @@ test("persisted end-to-end sample review: ownership, conflicts, corrections, dec
   await store.init();
   const jobs = new Jobs(store);
   await jobs.init();
-  const mailer = new MockVerificationMailer();
-  const api = new ApiController(store, jobs, mailer);
+  const api = new ApiController(store, jobs);
   function response() {
     const cookies: Record<string, string> = {};
     return {
@@ -48,16 +46,6 @@ test("persisted end-to-end sample review: ownership, conflicts, corrections, dec
       password: "another-horse-123",
       name: "Other",
     },
-    b.res,
-  );
-  for (const message of mailer.messages)
-    await api.verifyEmail({ token: message.token });
-  await api.login(
-    { email: "reviewer@example.com", password: "correct-horse-123" },
-    a.res,
-  );
-  await api.login(
-    { email: "other@example.com", password: "another-horse-123" },
     b.res,
   );
   const req = { cookies: a.cookies } as Request,

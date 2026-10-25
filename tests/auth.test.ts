@@ -6,10 +6,11 @@ import path from "node:path";
 import { createHash, scryptSync } from "node:crypto";
 import type { Request, Response } from "express";
 import { HttpException } from "@nestjs/common";
-import { ApiController } from "../apps/api/src/app";
+import { PATH_METADATA } from "@nestjs/common/constants";
+import { ApiController, AppModule } from "../apps/api/src/app";
 import { Store } from "../apps/api/src/store";
 import { Jobs } from "../apps/api/src/jobs";
-import { MockVerificationMailer } from "./helpers/verification";
+import { SmtpVerificationMailer } from "../apps/api/src/email";
 
 const password = "correct-horse-123";
 const hash = (value: string) =>
@@ -18,21 +19,34 @@ const status = (expected: number) => (e: unknown) =>
   e instanceof HttpException && e.getStatus() === expected;
 
 async function fixture(t: import("node:test").TestContext) {
-  const dir = await mkdtemp(path.join(tmpdir(), "cargo-verification-test-"));
-  const env = {
-    DATA_DIR: process.env.DATA_DIR,
-    DATABASE_URL: process.env.DATABASE_URL,
-  };
+  const dir = await mkdtemp(path.join(tmpdir(), "cargo-password-auth-test-"));
+  const keys = [
+    "DATA_DIR",
+    "DATABASE_URL",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_SECURE",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "SMTP_FROM",
+    "COOKIE_SECURE",
+  ];
+  const env = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   process.env.DATA_DIR = dir;
-  delete process.env.DATABASE_URL;
+  for (const key of keys.filter((key) => key !== "DATA_DIR"))
+    delete process.env[key];
   const store = new Store();
   await store.init();
-  const mailer = new MockVerificationMailer();
-  const api = new ApiController(store, new Jobs(store), mailer);
+  const api = new ApiController(store, new Jobs(store));
   const cookies: Record<string, string> = {};
+  let cookieOptions: any;
   const res = {
-    cookie(key: string, value: string) {
+    cookie(key: string, value: string, options: unknown) {
       cookies[key] = value;
+      cookieOptions = options;
+    },
+    clearCookie(key: string) {
+      delete cookies[key];
     },
   } as unknown as Response;
   const req = { cookies } as Request;
@@ -46,30 +60,55 @@ async function fixture(t: import("node:test").TestContext) {
   });
   const register = (email = "reviewer@example.com") =>
     api.register({ email, password, name: "Reviewer" }, res);
-  return { dir, store, mailer, api, cookies, res, req, register };
+  return {
+    dir,
+    store,
+    api,
+    cookies,
+    res,
+    req,
+    register,
+    cookieOptions: () => cookieOptions,
+  };
 }
 
-test("registration normalizes emails, stores only token hashes, and creates no session", async (t) => {
+test("registration signs in without SMTP, hashes credentials, and leaves ownership unverified", async (t) => {
   const f = await fixture(t);
-  const result = await f.register("  Reviewer@Example.com  ");
-  assert.equal(result.email, "reviewer@example.com");
-  assert.equal(result.verificationRequired, true);
-  assert.deepEqual(f.cookies, {});
-  const raw = f.mailer.messages[0].token;
-  assert.match(raw, /^[a-f0-9]{64}$/);
-  const persisted = await readFile(path.join(f.dir, "state.json"), "utf8");
-  assert.equal(persisted.includes(raw), false);
-  const state = JSON.parse(persisted);
-  assert.equal(state.users[0].emailVerifiedAt, null);
-  assert.equal(state.emailVerifications[0].hash, hash(raw));
-  assert.ok(
-    Math.abs(state.emailVerifications[0].expiresAt - Date.now() - 30 * 60000) <
-      2000,
+  const config = t.mock.method(
+    SmtpVerificationMailer.prototype,
+    "assertConfigured",
+    () => {
+      throw new Error("Email must stay disconnected");
+    },
   );
-  assert.equal(state.sessions.length, 0);
+  const send = t.mock.method(
+    SmtpVerificationMailer.prototype,
+    "sendVerification",
+    async () => {
+      throw new Error("Email must never be sent");
+    },
+  );
+  const user = await f.register(" Reviewer@Example.com ");
+  assert.equal(user.email, "reviewer@example.com");
+  assert.deepEqual(Object.keys(user).sort(), ["email", "id", "name"]);
+  assert.equal((await f.api.me(f.req)).id, user.id);
+  assert.deepEqual(await f.api.list(f.req), []);
+  const state = await f.store.transaction((s) => s);
+  assert.equal(state.users[0].emailVerifiedAt, null);
+  const [salt, digest] = state.users[0].password.split(":");
+  assert.equal(digest, scryptSync(password, salt, 64).toString("hex"));
+  assert.notEqual(state.users[0].password, password);
+  assert.equal(state.sessions[0].hash, hash(f.cookies.cargo_session));
+  assert.equal((state.emailVerifications ?? []).length, 0);
+  await f.api.login({ email: "reviewer@example.com", password }, f.res);
+  assert.equal(config.mock.callCount(), 0);
+  assert.equal(send.mock.callCount(), 0);
+  const raw = await readFile(path.join(f.dir, "state.json"), "utf8");
+  assert.equal(raw.includes(password), false);
+  assert.equal(raw.includes(f.cookies.cargo_session), false);
 });
 
-test("email uniqueness is normalized and atomic across concurrent registrations", async (t) => {
+test("normalized email uniqueness is atomic across concurrent registrations", async (t) => {
   const f = await fixture(t);
   const results = await Promise.allSettled([
     f.register(" Reviewer@example.com "),
@@ -80,192 +119,97 @@ test("email uniqueness is normalized and atomic across concurrent registrations"
     (r) => r.status === "rejected",
   ) as PromiseRejectedResult;
   assert.ok(status(409)(failure.reason));
-  await assert.rejects(f.register("not an email"), { name: "ZodError" });
+  assert.equal((await f.store.transaction((s) => s.users)).length, 1);
 });
 
-test("unverified accounts cannot log in or access protected routes through old sessions", async (t) => {
+test("registration and login retain email and password validation", async (t) => {
   const f = await fixture(t);
-  await f.register();
-  await assert.rejects(
-    f.api.login({ email: "reviewer@example.com", password }, f.res),
-    status(403),
-  );
-  await assert.rejects(
-    f.api.login(
-      { email: "reviewer@example.com", password: "wrong-password" },
-      f.res,
-    ),
-    status(401),
-  );
-  await f.store.transaction((s) =>
-    s.sessions.push({
-      hash: hash("old-session"),
-      userId: s.users[0].id,
-      expiresAt: Date.now() + 60000,
-    }),
-  );
-  f.cookies.cargo_session = "old-session";
-  for (const call of [
-    () => f.api.me(f.req),
-    () => f.api.list(f.req),
-    () => f.api.create({ reference: "BLOCKED" }, f.req),
-    () => f.api.sample(f.req),
-  ])
-    await assert.rejects(
-      call,
-      (e: unknown) => status(401)(e) || status(403)(e),
-    );
+  for (const body of [
+    { email: "not an email", password },
+    { email: "reviewer@example.com", password: "short" },
+    { email: "reviewer@example.com", password: "a".repeat(129) },
+    { password },
+  ]) {
+    await assert.rejects(f.api.register(body, f.res), { name: "ZodError" });
+    await assert.rejects(f.api.login(body, f.res), { name: "ZodError" });
+  }
+  assert.equal((await f.store.transaction((s) => s.users)).length, 0);
 });
 
-test("verification is atomic and single-use, then requires a fresh sign-in", async (t) => {
+test("unverified users can log in and access their data without changing ownership status", async (t) => {
   const f = await fixture(t);
-  await f.register();
-  const token = f.mailer.messages[0].token;
-  const results = await Promise.all([
-    f.api.verifyEmail({ token }),
-    f.api.verifyEmail({ token }),
-  ]);
-  assert.deepEqual(results.map((r) => r.status).sort(), [
-    "already_used",
-    "success",
-  ]);
-  await assert.rejects(f.api.me(f.req), status(401));
-  const user = await f.api.login(
+  const first = await f.register();
+  const shipment = await f.api.create({ reference: "PRESERVED-001" }, f.req);
+  await f.api.logout(f.req, f.res);
+  const loggedIn = await f.api.login(
     { email: " REVIEWER@example.com ", password },
     f.res,
   );
-  assert.equal(user.email, "reviewer@example.com");
-  assert.equal((await f.api.me(f.req)).id, user.id);
-  assert.deepEqual(await f.api.list(f.req), []);
+  assert.equal(loggedIn.id, first.id);
+  assert.equal(
+    (await f.api.get(shipment.id, f.req)).reference,
+    "PRESERVED-001",
+  );
+  assert.equal(
+    (await f.store.transaction((s) => s.users[0])).emailVerifiedAt,
+    null,
+  );
 });
 
-test("expired, invalid, and malformed links cannot verify an account", async (t) => {
+test("wrong passwords and unknown emails do not create sessions", async (t) => {
   const f = await fixture(t);
   await f.register();
-  const token = f.mailer.messages[0].token;
+  await f.api.logout(f.req, f.res);
+  for (const body of [
+    { email: "reviewer@example.com", password: "incorrect-password" },
+    { email: "unknown@example.com", password },
+  ])
+    await assert.rejects(f.api.login(body, f.res), status(401));
+  assert.equal((await f.store.transaction((s) => s.sessions)).length, 0);
+  await assert.rejects(f.api.list(f.req), status(401));
+});
+
+test("sessions retain cookie security, expiry checks, and logout revocation", async (t) => {
+  const f = await fixture(t);
+  process.env.COOKIE_SECURE = "true";
+  await f.register();
+  assert.deepEqual(f.cookieOptions(), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: true,
+    maxAge: 7 * 86400000,
+    path: "/",
+  });
   await f.store.transaction((s) => {
-    s.emailVerifications![0].expiresAt = Date.now() - 1;
+    s.sessions[0].expiresAt = Date.now() - 1;
   });
-  assert.equal((await f.api.verifyEmail({ token })).status, "expired");
-  assert.equal(
-    (await f.api.verifyEmail({ token: "a".repeat(64) })).status,
-    "invalid",
-  );
-  await assert.rejects(f.api.verifyEmail({ token: "broken" }), {
-    name: "ZodError",
-  });
+  await assert.rejects(f.api.me(f.req), status(401));
+  await f.api.login({ email: "reviewer@example.com", password }, f.res);
+  const token = f.cookies.cargo_session;
+  await f.api.logout(f.req, f.res);
   await assert.rejects(
-    f.api.login({ email: "reviewer@example.com", password }, f.res),
-    status(403),
+    f.api.me({ cookies: { cargo_session: token } } as Request),
+    status(401),
   );
 });
 
-test("resend enforces a persisted 60-second cooldown and invalidates the previous link", async (t) => {
+test("unverified accounts cannot access another user's shipments", async (t) => {
   const f = await fixture(t);
   await f.register();
-  const first = f.mailer.messages[0].token;
-  await f.api.resendVerification({ email: " REVIEWER@example.com " });
-  assert.equal(f.mailer.messages.length, 1);
-  await f.store.transaction((s) => {
-    s.users[0].verificationRequestedAt = Date.now() - 60001;
-  });
-  await Promise.all([
-    f.api.resendVerification({ email: "reviewer@example.com" }),
-    f.api.resendVerification({ email: "reviewer@example.com" }),
-  ]);
-  assert.equal(f.mailer.messages.length, 2);
-  assert.equal((await f.api.verifyEmail({ token: first })).status, "invalid");
-  assert.equal(
-    (await f.api.verifyEmail({ token: f.mailer.messages[1].token })).status,
-    "success",
+  const shipment = await f.api.create({ reference: "PRIVATE" }, f.req);
+  await f.register("other@example.com");
+  assert.deepEqual(await f.api.list(f.req), []);
+  await assert.rejects(f.api.get(shipment.id, f.req), status(404));
+  await assert.rejects(
+    f.api.validate(shipment.id, { version: shipment.version }, f.req),
+    status(404),
   );
 });
 
-test("public resend has identical responses for unknown, verified, cooldown and failed delivery", async (t) => {
-  const f = await fixture(t);
-  await f.register();
-  const unknown = await f.api.resendVerification({
-    email: "unknown@example.com",
-  });
-  assert.deepEqual(
-    await f.api.resendVerification({ email: "reviewer@example.com" }),
-    unknown,
-  );
-  await f.store.transaction((s) => {
-    s.users[0].verificationRequestedAt = 0;
-  });
-  f.mailer.failure = true;
-  assert.deepEqual(
-    await f.api.resendVerification({ email: "reviewer@example.com" }),
-    unknown,
-  );
-  assert.equal(unknown.deliveryConfirmed, false);
-  f.mailer.failure = false;
-  await f.store.transaction((s) => {
-    s.users[0].emailVerifiedAt = new Date().toISOString();
-  });
-  assert.deepEqual(
-    await f.api.resendVerification({ email: "reviewer@example.com" }),
-    unknown,
-  );
-  await assert.rejects(f.api.resendVerification({ email: "invalid" }), {
-    name: "ZodError",
-  });
-});
-
-test("delivery rejection retains an unverified account, issues no usable link, and allows later recovery", async (t) => {
-  const f = await fixture(t);
-  f.mailer.failure = true;
-  await assert.rejects(f.register(), status(503));
-  let state = await f.store.transaction((s) => s);
-  assert.equal(state.users.length, 1);
-  assert.equal(state.users[0].emailVerifiedAt, null);
-  assert.equal(state.sessions.length, 0);
-  assert.equal(state.emailVerifications![0].accepted, false);
-  assert.ok(state.emailVerifications![0].invalidatedAt);
-  assert.deepEqual(f.cookies, {});
-  f.mailer.failure = false;
-  await f.store.transaction((s) => {
-    s.users[0].verificationRequestedAt = Date.now() - 60001;
-  });
-  await f.api.resendVerification({ email: "reviewer@example.com" });
-  assert.equal(
-    (await f.api.verifyEmail({ token: f.mailer.messages[0].token })).status,
-    "success",
-  );
-});
-
-test("a token is unusable before SMTP acceptance is confirmed", async (t) => {
-  const f = await fixture(t);
-  let release!: () => void;
-  let entered!: () => void;
-  const ready = new Promise<void>((r) => {
-    entered = r;
-  });
-  const waiting = new Promise<void>((r) => {
-    release = r;
-  });
-  let raw = "";
-  t.mock.method(
-    f.mailer,
-    "sendVerification",
-    async (_email: string, token: string) => {
-      raw = token;
-      entered();
-      await waiting;
-    },
-  );
-  const registration = f.register();
-  await ready;
-  assert.equal((await f.api.verifyEmail({ token: raw })).status, "invalid");
-  release();
-  await registration;
-  assert.equal((await f.api.verifyEmail({ token: raw })).status, "success");
-});
-
-test("legacy users migrate to unverified without deleting users or shipments and can request verification", async (t) => {
+test("legacy loading preserves users, data, valid unverified sessions, and existing verification timestamps", async (t) => {
   const f = await fixture(t);
   const salt = "legacy-test-salt";
+  const timestamp = "2026-10-01T00:00:00.000Z";
   const legacy = {
     users: [
       {
@@ -273,6 +217,13 @@ test("legacy users migrate to unverified without deleting users or shipments and
         email: "Legacy@Example.com ",
         name: "Legacy",
         password: `${salt}:${scryptSync(password, salt, 64).toString("hex")}`,
+      },
+      {
+        id: "verified",
+        email: "verified@example.com",
+        name: "Verified",
+        password: "preserved",
+        emailVerifiedAt: timestamp,
       },
     ],
     sessions: [
@@ -282,78 +233,81 @@ test("legacy users migrate to unverified without deleting users or shipments and
         expiresAt: Date.now() + 60000,
       },
     ],
-    shipments: [{ id: "preserved", ownerId: "legacy" }],
+    shipments: [
+      {
+        id: "preserved",
+        ownerId: "legacy",
+        reference: "KEPT",
+        documents: {},
+        checks: [],
+        history: [],
+        version: 1,
+        createdAt: "2026-10-01T00:00:00.000Z",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+        reviewStatus: "in_progress",
+        synthetic: false,
+      },
+    ],
+    emailVerifications: [
+      {
+        hash: hash("old-verification-token"),
+        userId: "legacy",
+        accepted: true,
+        expiresAt: Date.now() + 60000,
+      },
+    ],
   };
   await writeFile(path.join(f.dir, "state.json"), JSON.stringify(legacy));
-  await f.store.close();
   const reopened = new Store();
   await reopened.init();
   t.after(() => reopened.close());
+  const api = new ApiController(reopened, new Jobs(reopened));
   const state = await reopened.transaction((s) => s);
-  assert.equal(state.users.length, 1);
-  assert.equal(state.users[0].emailVerifiedAt, null);
-  assert.equal(state.users[0].email, "legacy@example.com");
   assert.deepEqual(state.shipments, legacy.shipments);
-  assert.equal(state.sessions.length, 0);
-  const api = new ApiController(reopened, new Jobs(reopened), f.mailer);
-  await assert.rejects(
-    api.login({ email: "legacy@example.com", password }, f.res),
-    status(403),
-  );
-  await api.resendVerification({ email: "legacy@example.com" });
+  assert.deepEqual(state.sessions, legacy.sessions);
+  assert.deepEqual(state.emailVerifications, legacy.emailVerifications);
+  assert.equal(state.users[0].emailVerifiedAt, null);
+  assert.equal(state.users[1].emailVerifiedAt, timestamp);
   assert.equal(
-    (await api.verifyEmail({ token: f.mailer.messages[0].token })).status,
-    "success",
+    (await api.me({ cookies: { cargo_session: "legacy-session" } } as Request))
+      .id,
+    "legacy",
   );
-  await api.login({ email: "legacy@example.com", password }, f.res);
+  await api.login({ email: " LEGACY@example.com ", password }, f.res);
+  assert.equal((await api.get("preserved", f.req)).reference, "KEPT");
+  assert.equal(
+    (await reopened.transaction((s) => s.users[0])).emailVerifiedAt,
+    null,
+  );
 });
 
-test("missing SMTP configuration rejects registration and all resend addresses without creating users", async (t) => {
-  const f = await fixture(t);
-  const { SmtpVerificationMailer } = await import("../apps/api/src/email");
-  const previous = process.env.SMTP_HOST;
-  delete process.env.SMTP_HOST;
-  t.after(() => {
-    if (previous === undefined) delete process.env.SMTP_HOST;
-    else process.env.SMTP_HOST = previous;
-  });
-  const api = new ApiController(
-    f.store,
-    new Jobs(f.store),
-    new SmtpVerificationMailer(),
-  );
-  await assert.rejects(
-    api.register({ email: "reviewer@example.com", password }, f.res),
-    status(503),
-  );
-  for (const email of ["reviewer@example.com", "unknown@example.com"])
-    await assert.rejects(
-      api.resendVerification({ email }),
-      (e) =>
-        status(503)(e) &&
-        ((e as HttpException).getResponse() as { code?: string }).code ===
-          "EMAIL_CONFIGURATION_ERROR",
-    );
-  assert.equal((await f.store.transaction((s) => s.users)).length, 0);
-});
-
-test("legacy normalization collisions stop migration without rewriting or deleting records", async (t) => {
+test("normalization collisions stop loading without deleting or rewriting records", async (t) => {
   const f = await fixture(t);
   const users = ["Reviewer@example.com", " reviewer@EXAMPLE.COM "].map(
-    (email, index) => ({
-      id: `legacy-${index}`,
+    (email, i) => ({
+      id: `user-${i}`,
       email,
       name: "Reviewer",
       password: "preserved",
     }),
   );
-  const original = JSON.stringify({ users, sessions: [], shipments: [] });
-  await writeFile(path.join(f.dir, "state.json"), original);
+  const raw = JSON.stringify({ users, sessions: [], shipments: [] });
+  await writeFile(path.join(f.dir, "state.json"), raw);
   const reopened = new Store();
   await assert.rejects(reopened.init(), /duplicate normalized emails/);
-  assert.equal(
-    await readFile(path.join(f.dir, "state.json"), "utf8"),
-    original,
-  );
   await reopened.close();
+  assert.equal(await readFile(path.join(f.dir, "state.json"), "utf8"), raw);
+});
+
+test("the active API exposes no verification routes or mailer provider", () => {
+  const paths = Object.getOwnPropertyNames(ApiController.prototype).map((key) =>
+    Reflect.getMetadata(PATH_METADATA, (ApiController.prototype as any)[key]),
+  );
+  assert.equal(paths.includes("auth/verify-email"), false);
+  assert.equal(paths.includes("auth/resend-verification"), false);
+  const providers = Reflect.getMetadata("providers", AppModule);
+  assert.equal(
+    providers.some((p: any) => p.provide === "MAILER"),
+    false,
+  );
 });

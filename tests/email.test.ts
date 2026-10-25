@@ -36,7 +36,7 @@ function configure(t: import("node:test").TestContext) {
   });
 }
 
-test("SMTP configuration is mandatory and the trusted frontend origin is validated", (t) => {
+test("deferred SMTP module: configuration is mandatory and the trusted frontend origin is validated", (t) => {
   configure(t);
   const mailer = new SmtpVerificationMailer();
   mailer.assertConfigured();
@@ -75,7 +75,7 @@ test("SMTP configuration is mandatory and the trusted frontend origin is validat
   }
 });
 
-test("SMTP uses TLS, disables debug output, and builds fragment links from APP_ORIGIN", async (t) => {
+test("deferred SMTP module: TLS, disables debug output, and builds fragment links from APP_ORIGIN", async (t) => {
   configure(t);
   let options: any;
   let message: any;
@@ -117,7 +117,7 @@ test("SMTP uses TLS, disables debug output, and builds fragment links from APP_O
   assert.equal(options.secure, true);
 });
 
-test("SMTP rejection and exceptions fail honestly without exposing provider error content", async (t) => {
+test("deferred SMTP module: rejection and exceptions fail honestly without exposing provider error content", async (t) => {
   configure(t);
   for (const throws of [false, true]) {
     t.mock.method(
