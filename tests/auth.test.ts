@@ -17,7 +17,7 @@ const hash = (value: string) =>
 const status = (expected: number) => (e: unknown) =>
   e instanceof HttpException && e.getStatus() === expected;
 
-async function fixture(t: Parameters<Parameters<typeof test>[1]>[0]) {
+async function fixture(t: import("node:test").TestContext) {
   const dir = await mkdtemp(path.join(tmpdir(), "cargo-verification-test-"));
   const env = {
     DATA_DIR: process.env.DATA_DIR,
@@ -306,4 +306,54 @@ test("legacy users migrate to unverified without deleting users or shipments and
     "success",
   );
   await api.login({ email: "legacy@example.com", password }, f.res);
+});
+
+test("missing SMTP configuration rejects registration and all resend addresses without creating users", async (t) => {
+  const f = await fixture(t);
+  const { SmtpVerificationMailer } = await import("../apps/api/src/email");
+  const previous = process.env.SMTP_HOST;
+  delete process.env.SMTP_HOST;
+  t.after(() => {
+    if (previous === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = previous;
+  });
+  const api = new ApiController(
+    f.store,
+    new Jobs(f.store),
+    new SmtpVerificationMailer(),
+  );
+  await assert.rejects(
+    api.register({ email: "reviewer@example.com", password }, f.res),
+    status(503),
+  );
+  for (const email of ["reviewer@example.com", "unknown@example.com"])
+    await assert.rejects(
+      api.resendVerification({ email }),
+      (e) =>
+        status(503)(e) &&
+        ((e as HttpException).getResponse() as { code?: string }).code ===
+          "EMAIL_CONFIGURATION_ERROR",
+    );
+  assert.equal((await f.store.transaction((s) => s.users)).length, 0);
+});
+
+test("legacy normalization collisions stop migration without rewriting or deleting records", async (t) => {
+  const f = await fixture(t);
+  const users = ["Reviewer@example.com", " reviewer@EXAMPLE.COM "].map(
+    (email, index) => ({
+      id: `legacy-${index}`,
+      email,
+      name: "Reviewer",
+      password: "preserved",
+    }),
+  );
+  const original = JSON.stringify({ users, sessions: [], shipments: [] });
+  await writeFile(path.join(f.dir, "state.json"), original);
+  const reopened = new Store();
+  await assert.rejects(reopened.init(), /duplicate normalized emails/);
+  assert.equal(
+    await readFile(path.join(f.dir, "state.json"), "utf8"),
+    original,
+  );
+  await reopened.close();
 });
