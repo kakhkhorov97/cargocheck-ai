@@ -52,6 +52,25 @@ You can also create a review and upload your own PDF/JPG/PNG (10 MB per file; lo
 - Persistent local-file development store; optional PostgreSQL store and BullMQ/Redis job configuration; bounded extraction retries and visible failures.
 - Synthetic sample documents, automated checks, CI configuration and Docker Compose setup.
 
+## Frontend deployment checks
+
+Build the frontend from the repository root:
+
+```bash
+npm run build -w @cargo/shared
+npm run build -w @cargo/web
+```
+
+Vercel serves `apps/web/dist`, as configured in `vercel.json`. A local build does not update the live website. Confirm that the production deployment uses the intended Git commit before checking changes in the browser.
+
+If the browser tab has no CargoCheck icon:
+
+1. Open `/favicon.svg` on the deployed website. It should display the teal cargo cube. A 404 means the deployment is missing the icon.
+2. View the deployed page source and check for a `rel="icon"` link to `/favicon.svg`. If it is missing, check the deployed commit and build output.
+3. After both checks pass, close and reopen the tab in Chrome to retry loading the icon.
+
+The favicon source is `apps/web/public/favicon.svg`; its HTML link is in `apps/web/index.html`.
+
 ## Extraction modes
 
 ### Local OCR (default; no AI key)
