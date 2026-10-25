@@ -1,6 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { api } from "../apps/web/src/api";
+import { api, ApiError } from "../apps/web/src/api";
+
+test("verification errors preserve their code and HTTP status for recovery screens", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json(
+      {
+        message: "Verify your email before signing in.",
+        code: "EMAIL_NOT_VERIFIED",
+      },
+      { status: 403 },
+    ),
+  );
+  await assert.rejects(api("/auth/login", {}), (error) => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.code, "EMAIL_NOT_VERIFIED");
+    assert.equal(error.status, 403);
+    return true;
+  });
+});
 
 test("connection failures explain how to recover", async (t) => {
   t.mock.method(globalThis, "fetch", async () => {

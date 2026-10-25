@@ -1,3 +1,13 @@
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
 export async function api<T>(
   url: string,
   body?: unknown,
@@ -21,12 +31,14 @@ export async function api<T>(
     );
   }
   if (!r.ok) {
+    let code: string | undefined;
     let message =
       r.status === 429
         ? "Too many requests. Wait a few minutes before trying again."
         : `Request failed (${r.status}). Please try again.`;
     try {
       const e = await r.json();
+      if (typeof e?.code === "string") code = e.code;
       if (typeof e?.message === "string" && e.message.trim()) {
         message = e.message;
       } else if (Array.isArray(e?.message)) {
@@ -37,7 +49,7 @@ export async function api<T>(
         if (details.length) message = details.join(" ");
       }
     } catch {}
-    throw new Error(message);
+    throw new ApiError(message, r.status, code);
   }
   try {
     return await r.json();

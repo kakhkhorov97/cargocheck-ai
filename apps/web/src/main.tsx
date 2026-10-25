@@ -34,7 +34,8 @@ import type {
   Check as RuleCheck,
 } from "@cargo/shared";
 import { allFields, processingStatus, isConfirmed } from "@cargo/shared";
-import { api } from "./api";
+import { api, ApiError } from "./api";
+import { EmailVerificationPage, VerificationNotice } from "./verification";
 import "./styles.css";
 
 type User = { id: string; name: string; email: string };
@@ -204,6 +205,8 @@ function App() {
       if (x?.id) setSelected(x);
     });
   }
+  if (new URLSearchParams(window.location.search).has("verify-email"))
+    return <EmailVerificationPage />;
   if (boot)
     return (
       <div className="boot">
@@ -873,7 +876,14 @@ function Stat({
 }
 
 function Auth({ onAuth }: { onAuth: (u: User) => void }) {
-  const [register, setRegister] = useState(true),
+  const [pending, setPending] = useState<{
+    email: string;
+    message: string;
+    cooldown: number;
+  } | null>(null);
+  const [register, setRegister] = useState(
+      () => !new URLSearchParams(window.location.search).has("sign-in"),
+    ),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
     [name, setName] = useState(""),
@@ -952,85 +962,139 @@ function Auth({ onAuth }: { onAuth: (u: User) => void }) {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
+            if (pending || busy) return;
             setBusy(true);
             setError("");
             try {
-              onAuth(
-                await api<User>(`/auth/${register ? "register" : "login"}`, {
-                  email,
-                  password,
-                  ...(register ? { name } : {}),
-                }),
-              );
+              if (register) {
+                const result = await api<{
+                  email: string;
+                  message: string;
+                  retryAfter: number;
+                }>("/auth/register", { email, password, name });
+                setPending({
+                  email: result.email,
+                  message: result.message,
+                  cooldown: result.retryAfter,
+                });
+                setPassword("");
+              } else {
+                onAuth(await api<User>("/auth/login", { email, password }));
+              }
             } catch (e) {
-              setError((e as Error).message);
+              if (
+                e instanceof ApiError &&
+                ["EMAIL_NOT_VERIFIED", "EMAIL_DELIVERY_FAILED"].includes(
+                  e.code ?? "",
+                )
+              ) {
+                setPending({
+                  email: email.trim().toLowerCase(),
+                  message: e.message,
+                  cooldown: e.code === "EMAIL_DELIVERY_FAILED" ? 60 : 0,
+                });
+                setPassword("");
+              } else setError((e as Error).message);
             } finally {
               setBusy(false);
             }
           }}
         >
-          <h2>{register ? "Create your account" : "Welcome back"}</h2>
-          <p>
-            {register
-              ? "Start with a synthetic sample or your own documents."
-              : "Sign in to continue your document reviews."}
-          </p>
-          {error && (
-            <div className="banner error" role="alert">
-              {error}
-            </div>
-          )}
-          {register && (
-            <label>
-              Name
-              <input
-                required
-                autoComplete="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </label>
-          )}
-          <label>
-            Email
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+          {pending ? (
+            <VerificationNotice
+              email={pending.email}
+              initialMessage={pending.message}
+              initialCooldown={pending.cooldown}
+              onSignIn={() => {
+                setPending(null);
+                setRegister(false);
+                setError("");
+              }}
             />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              required
-              minLength={10}
-              maxLength={128}
-              autoComplete={register ? "new-password" : "current-password"}
-              placeholder="At least 10 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-          <Button primary type="submit" disabled={busy}>
-            {busy ? <LoaderCircle size={16} className="spin" /> : null}
-            {register ? "Create account" : "Sign in"}
-            <ArrowUpRight size={16} />
-          </Button>
-          <button
-            type="button"
-            className="auth-switch"
-            onClick={() => {
-              setRegister(!register);
-              setError("");
-            }}
-          >
-            {register
-              ? "Already have an account? Sign in"
-              : "New to CargoCheck? Create an account"}
-          </button>
+          ) : (
+            <>
+              <h2>{register ? "Create your account" : "Welcome back"}</h2>
+              <p>
+                {register
+                  ? "Start with a synthetic sample or your own documents."
+                  : "Sign in to continue your document reviews."}
+              </p>
+              {error && (
+                <div className="banner error" role="alert">
+                  {error}
+                </div>
+              )}
+              {register && (
+                <label>
+                  Name
+                  <input
+                    required
+                    autoComplete="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </label>
+              )}
+              <label>
+                Email
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  required
+                  minLength={10}
+                  maxLength={128}
+                  autoComplete={register ? "new-password" : "current-password"}
+                  placeholder="At least 10 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </label>
+              <Button primary type="submit" disabled={busy}>
+                {busy ? <LoaderCircle size={16} className="spin" /> : null}
+                {register ? "Create account" : "Sign in"}
+                <ArrowUpRight size={16} />
+              </Button>
+              {!register && (
+                <button
+                  type="button"
+                  className="auth-switch"
+                  disabled={busy}
+                  onClick={() =>
+                    setPending({
+                      email: email.trim().toLowerCase(),
+                      message:
+                        "Verify your email before signing in. Enter your account email to request a link.",
+                      cooldown: 0,
+                    })
+                  }
+                >
+                  Request a verification link
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                className="auth-switch"
+                onClick={() => {
+                  setRegister(!register);
+                  setError("");
+                }}
+              >
+                {register
+                  ? "Already have an account? Sign in"
+                  : "New to CargoCheck? Create an account"}
+              </button>
+            </>
+          )}
           <div className="auth-note">
             <ShieldCheck size={17} />
             <span>

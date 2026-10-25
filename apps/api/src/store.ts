@@ -5,6 +5,26 @@ import type { State } from "@cargo/shared";
 import { validateProductionDatabase } from "./production-config";
 
 const empty = (): State => ({ users: [], sessions: [], shipments: [] });
+// Explicit, idempotent migration: legacy accounts must prove email ownership.
+// Keep users and shipments; revoke sessions that predate verification.
+function migrate(state: State) {
+  state.emailVerifications ??= [];
+  const emails = new Set<string>();
+  for (const user of state.users) {
+    user.email = user.email.trim().toLowerCase();
+    if (emails.has(user.email))
+      throw new Error(
+        "Account migration blocked: duplicate normalized emails require administrator resolution. No accounts were deleted.",
+      );
+    emails.add(user.email);
+    user.emailVerifiedAt ??= null;
+  }
+  state.sessions = state.sessions.filter((session) =>
+    state.users.some(
+      (user) => user.id === session.userId && user.emailVerifiedAt,
+    ),
+  );
+}
 export class Store {
   private tail: Promise<unknown> = Promise.resolve();
   private pool?: Pool;
@@ -25,6 +45,7 @@ export class Store {
         [JSON.stringify(empty())],
       );
     }
+    await this.transaction(() => {});
   }
   async transaction<T>(fn: (s: State) => T | Promise<T>): Promise<T> {
     const run = this.tail.then(async () => {
@@ -36,6 +57,7 @@ export class Store {
             "SELECT data FROM cargo_state WHERE id=1 FOR UPDATE",
           );
           const state = rows[0].data as State;
+          migrate(state);
           const result = await fn(state);
           const detached = structuredClone(result);
           await c.query("UPDATE cargo_state SET data=$1 WHERE id=1", [
@@ -58,6 +80,7 @@ export class Store {
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
         s = empty();
       }
+      migrate(s);
       const result = await fn(s);
       const tmp = file + ".tmp";
       await writeFile(tmp, JSON.stringify(s), { mode: 0o600 });

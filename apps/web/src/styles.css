@@ -1315,7 +1315,8 @@ small {
   background: white;
   padding: 48px clamp(24px, 5vw, 80px);
 }
-.auth-form form {
+.auth-form form,
+.auth-form .verification-panel {
   max-width: 390px;
   width: 100%;
 }
@@ -1324,7 +1325,8 @@ small {
   margin-top: 0;
   letter-spacing: -0.03em;
 }
-.auth-form form > p {
+.auth-form form > p,
+.auth-form .verification-panel > p {
   font-size: 14px;
   color: var(--muted);
   margin: 12px 0 32px;

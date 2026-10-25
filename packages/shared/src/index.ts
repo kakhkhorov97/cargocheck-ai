@@ -98,11 +98,22 @@ export interface User {
   email: string;
   name: string;
   password: string;
+  emailVerifiedAt?: string | null;
+  verificationRequestedAt?: number;
+}
+export interface EmailVerification {
+  hash: string;
+  userId: string;
+  expiresAt: number;
+  accepted: boolean;
+  usedAt?: number;
+  invalidatedAt?: number;
 }
 export interface State {
   users: User[];
   sessions: { hash: string; userId: string; expiresAt: number }[];
   shipments: Shipment[];
+  emailVerifications?: EmailVerification[];
 }
 export const emptyField = (): Field => ({
   value: null,

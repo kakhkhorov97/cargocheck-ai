@@ -22,13 +22,15 @@
     "pg": "^8.0.0",
     "bullmq": "^5.0.0",
     "ioredis": "^5.0.0",
-    "pdfkit": "^0.17.0"
+    "pdfkit": "^0.17.0",
+    "nodemailer": "^10.2.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/multer": "^2.0.0",
     "@types/cookie-parser": "^1.4.0",
     "@types/pg": "^8.0.0",
-    "@types/pdfkit": "^0.17.0"
+    "@types/pdfkit": "^0.17.0",
+    "@types/nodemailer": "^8.0.2"
   }
 }

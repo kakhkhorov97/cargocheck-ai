@@ -16,25 +16,23 @@ class Errors implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost) {
     const res = host.switchToHttp().getResponse<Response>();
     if (error instanceof ZodError)
-      return res
-        .status(400)
-        .json({
-          message: "Invalid request.",
-          details: error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
-        });
+      return res.status(400).json({
+        message: "Invalid request.",
+        details: error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+      });
     if (error instanceof HttpException)
-      return res
-        .status(error.getStatus())
-        .json({
-          message:
-            typeof error.getResponse() === "string"
-              ? error.getResponse()
-              : (error.getResponse() as { message: unknown }).message,
-        });
-    console.error(
-      "Request failed:",
-      error instanceof Error ? error.message : "unknown",
-    );
+      return res.status(error.getStatus()).json({
+        ...(typeof error.getResponse() === "object" &&
+        "code" in (error.getResponse() as object)
+          ? { code: (error.getResponse() as { code: string }).code }
+          : {}),
+        message:
+          typeof error.getResponse() === "string"
+            ? error.getResponse()
+            : (error.getResponse() as { message: unknown }).message,
+      });
+    // Untrusted errors may contain SMTP credentials, message bodies, or tokens.
+    console.error("Request failed with an unexpected server error.");
     return res
       .status(500)
       .json({ message: "The request could not be completed. Try again." });
@@ -66,6 +64,18 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     return res.status(403).json({ message: "Origin not allowed." });
   next();
 });
+app.use(
+  ["/api/auth/verify-email", "/api/auth/resend-verification"],
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 15,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: {
+      message: "Too many verification requests. Try again in 15 minutes.",
+    },
+  }),
+);
 app.use(
   "/api/auth",
   rateLimit({
