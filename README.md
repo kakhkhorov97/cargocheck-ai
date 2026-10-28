@@ -175,7 +175,7 @@ npm run typecheck
 npm run build
 ```
 
-The 11 tests cover:
+The test suite (42 tests at cd2e5db) covers:
 
 - Quantity mismatch and exact decimal arithmetic.
 - Unit aliases, incompatible units and blocked comparisons.
